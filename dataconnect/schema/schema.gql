@@ -1,0 +1,42 @@
+type User @table {
+  email: String!
+  userType: String!
+  displayName: String
+  phoneNumber: String
+  address: String
+}
+
+type Restaurant @table {
+  user: User
+  name: String!
+  address: String!
+  website: String
+  contactPerson: String
+}
+
+type NGO @table {
+  user: User
+  name: String!
+  address: String!
+  contactPerson: String
+  missionStatement: String
+  website: String
+}
+
+type Donation @table {
+  restaurant: Restaurant
+  foodName: String!
+  quantityServings: Int!
+  freshnessStatus: String!
+  status: String!
+  description: String
+  imageUrl: String
+  claimedAt: Timestamp
+}
+
+type Claim @table {
+  ngo: NGO!
+  donation: Donation!
+  claimedAt: Timestamp!
+  notesFromNGO: String
+}

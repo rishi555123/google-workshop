@@ -1,0 +1,32 @@
+mutation ClaimDonation($donationId: UUID!, $ngoId: UUID!, $notesFromNGO: String) @auth(level: USER) {
+  claim_insert(data: {donationId: $donationId, ngoId: $ngoId, claimedAt_expr: "request.time", notesFromNGO: $notesFromNGO}) {
+    id
+  }
+}
+
+query ListAvailableDonations @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public") {
+  donations(where: {status: {eq: "available"}}) {
+    id
+    foodName
+    description
+    quantityServings
+    freshnessStatus
+    imageUrl
+  }
+}
+
+mutation CreateDonation($restaurantId: UUID!, $foodName: String!, $description: String!, $quantityServings: Int!, $freshnessStatus: String!, $imageUrl: String, $status: String!) @auth(level: USER) {
+  donation_insert(data: {restaurantId: $restaurantId, foodName: $foodName, description: $description, quantityServings: $quantityServings, freshnessStatus: $freshnessStatus, imageUrl: $imageUrl, status: $status}) {
+    id
+  }
+}
+
+query GetMyRestaurant(@authId: UUID!) @auth(level: USER) {
+  restaurant(id: $authId) {
+    id
+    name
+    address
+    contactPerson
+    website
+  }
+}

@@ -1,0 +1,40 @@
+mutation SeedData @auth(level: PUBLIC, insecureReason: "This operation is used to seed the database with initial data and does not require authentication") {
+  user_insertMany(data: [
+    {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      email: "demo1@example.com",
+      userType: "NGO"
+    },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      email: "demo2@example.com",
+      userType: "Restaurant"
+    }
+  ])
+  nGO_insertMany(data: [
+    {
+      id: "650e8400-e29b-41d4-a716-446655440002",
+      userId: "550e8400-e29b-41d4-a716-446655440000",
+      name: "Demo NGO 1",
+      address: "123 Demo St"
+    }
+  ])
+  restaurant_insertMany(data: [
+    {
+      id: "750e8400-e29b-41d4-a716-446655440003",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+      name: "Demo Restaurant 1",
+      address: "456 Demo Ave"
+    }
+  ])
+  donation_insertMany(data: [
+    {
+      id: "850e8400-e29b-41d4-a716-446655440004",
+      restaurantId: "750e8400-e29b-41d4-a716-446655440003",
+      foodName: "Example Food",
+      freshnessStatus: "Fresh",
+      quantityServings: 10,
+      status: "Available"
+    }
+  ])
+}
