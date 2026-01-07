@@ -14,15 +14,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-async function createTestDocument() {
-  try {
-    await setDoc(doc(db, "users", "testUser"), {
-      name: "Test Name",
-      role: "Admin"
-    });
-    console.log("Document written! Check the Firestore Console.");
-  } catch (e) {
-    console.error("Error adding document: ", e);
-  }
-}
-createTestDocument();
+// async function createTestDocument() {
+//   try {
+//     await setDoc(doc(db, "users", "testUser"), {
+//       name: "Test Name",
+//       role: "Admin"
+//     });
+//     console.log("Document written! Check the Firestore Console.");
+//   } catch (e) {
+//     console.error("Error adding document: ", e);
+//   }
+// }
+// createTestDocument();
