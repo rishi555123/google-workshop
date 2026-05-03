@@ -1,35 +1,44 @@
-import { useState, useEffect } from "react"; // Added useEffect
+import { useState, useEffect } from "react";
 import "./App.css";
 
 import Header from "./components/Header";
+import Footer from "./components/Footer";
 import Home from "./components/Home";
-import Register from "./components/Register";
-import Login from "./components/Login";
-import RestaurantDashboard from "./components/RestaurantDashboard";
-import NGODashboard from "./components/NGODashboard";
-import EditProfile from "./components/EditProfile";
 import AboutUs from "./components/AboutUs";
 import HowItWorks from "./components/HowItWorks";
-import Footer from './components/Footer';
+import Login from "./components/Login";
+import Register from "./components/Register";
+import EditProfile from "./components/EditProfile";
+import RestaurantDashboard from "./components/RestaurantDashboard";
+import NGODashboard from "./components/NGODashboard";
+import { deleteAccount } from "./services/authService";
 
 function App() {
   const [page, setPage] = useState("home");
   const [user, setUser] = useState(null);
 
-  // --- GLOBAL SCROLL TO TOP ON PAGE CHANGE ---
+  // Scroll to top on every page change
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [page]);
 
-  // --- DELETE ACCOUNT LOGIC ---
-  const deleteAccount = () => {
-    if (window.confirm("Are you sure you want to delete your account? This cannot be undone.")) {
-      const allUsers = JSON.parse(localStorage.getItem("users")) || [];
-      const filtered = allUsers.filter(u => u.userId !== user.userId);
-      localStorage.setItem("users", JSON.stringify(filtered));
-      setUser(null); 
-      setPage("home");
-      alert("Account deleted successfully.");
+  const nav = (p) => setPage(p);
+
+  const handleLogin = (loggedInUser) => {
+    setUser(loggedInUser);
+    nav(loggedInUser.role === "restaurant" ? "restaurant" : "ngo");
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    nav("home");
+  };
+
+  const handleDeleteAccount = () => {
+    if (window.confirm("Delete your account permanently? This cannot be undone.")) {
+      deleteAccount(user.userId);
+      setUser(null);
+      nav("home");
     }
   };
 
@@ -37,65 +46,47 @@ function App() {
     <>
       <Header
         user={user}
-        goHome={() => setPage("home")}
-        goAbout={() => setPage("about")}
-        goHow={() => setPage("how-it-works")}
-        goLogin={() => setPage("login")}
-        goRegister={() => setPage("register")}
-        logout={() => { setUser(null); setPage("home"); }}
+        currentPage={page}
+        onNav={nav}
+        onLogout={handleLogout}
       />
 
-      {page === "home" && <Home goRegister={() => setPage("register")} />}
-      {page === "about" && <AboutUs />}
+      {page === "home"         && <Home onRegister={() => nav("register")} />}
+      {page === "about"        && <AboutUs />}
       {page === "how-it-works" && <HowItWorks />}
 
-      {page === "register" && (
-        <Register goLogin={() => setPage("login")} />
-      )}
-
       {page === "login" && (
-        <Login
-          setUser={setUser}
-          goDashboard={(role) =>
-            role === "restaurant"
-              ? setPage("restaurant")
-              : setPage("ngo")
-          }
-        />
+        <Login onLogin={handleLogin} onGoRegister={() => nav("register")} />
+      )}
+      {page === "register" && (
+        <Register onGoLogin={() => nav("login")} />
       )}
 
       {page === "edit" && user && (
         <EditProfile
           user={user}
           setUser={setUser}
-          goBack={() =>
-            setPage(user.role === "restaurant" ? "restaurant" : "ngo")
-          }
+          onBack={() => nav(user.role === "restaurant" ? "restaurant" : "ngo")}
         />
       )}
 
       {page === "restaurant" && user && (
         <RestaurantDashboard
           user={user}
-          goEdit={() => setPage("edit")}
-          deleteAccount={deleteAccount}
+          onEdit={() => nav("edit")}
+          onDeleteAccount={handleDeleteAccount}
         />
       )}
 
       {page === "ngo" && user && (
-        <NGODashboard 
-          user={user} 
-          logout={() => { setUser(null); setPage("home"); }} 
-          goEdit={() => setPage("edit")} 
-          deleteAccount={deleteAccount}
+        <NGODashboard
+          user={user}
+          onEdit={() => nav("edit")}
+          onDeleteAccount={handleDeleteAccount}
         />
       )}
 
-      <Footer 
-        goHome={() => setPage("home")} 
-        goAbout={() => setPage("about")} 
-        goHow={() => setPage("how-it-works")} 
-      />
+      <Footer onNav={nav} />
     </>
   );
 }

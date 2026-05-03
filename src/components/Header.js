@@ -1,34 +1,55 @@
-function Header({ user, goHome, goAbout, goHow, goLogin, goRegister, logout }) {
+import { useState } from "react";
+
+function Header({ user, currentPage, onNav, onLogout }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const navLink = (page, label) => (
+    <button
+      onClick={() => { onNav(page); setMenuOpen(false); }}
+      style={{ fontWeight: currentPage === page ? 800 : 600,
+               color: currentPage === page ? "var(--primary)" : undefined }}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div className="header">
-      <div className="header-left" onClick={goHome}>
-        {/* Increased logo size slightly to 55px */}
-        <img 
-          src="/logo.jpeg" 
-          alt="Logo" 
-          style={{ height: '55px', width: 'auto', borderRadius: '8px' }} 
-        />
-        <h2>Food Link</h2>
+    <header className="header">
+      <div className="header-logo" onClick={() => onNav("home")}>
+        <img src="/logo.jpeg" alt="Food Link logo" />
+        <span>Food Link</span>
       </div>
 
-      <div className="nav-menu">
-        <span onClick={goHome}>Home</span>
-        <span onClick={goAbout}>About Us</span>
-        <span onClick={goHow}>How It Works</span>
-      </div>
+      <nav className={`nav-links${menuOpen ? " open" : ""}`}>
+        {navLink("home",         "Home")}
+        {navLink("about",        "About Us")}
+        {navLink("how-it-works", "How It Works")}
+      </nav>
 
-      <div className="header-right">
-  {!user ? (
-    <>
-      {/* Changed class to transparent-btn */}
-      <button onClick={goLogin} className="transparent-btn">Login</button>
-      <button className="primary-btn" onClick={goRegister}>Get Started</button>
-    </>
-  ) : (
-    <button className="primary-btn" onClick={logout}>Logout</button>
-  )}
-</div>
-    </div>
+      <div className="nav-actions">
+        {!user ? (
+          <>
+            <button className="btn btn-ghost" onClick={() => onNav("login")}>
+              Login
+            </button>
+            <button className="btn btn-primary" onClick={() => onNav("register")}>
+              Get Started
+            </button>
+          </>
+        ) : (
+          <button className="btn btn-danger btn-sm" onClick={onLogout}>
+            Logout
+          </button>
+        )}
+        <button
+          className="nav-toggle"
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-label="Toggle menu"
+        >
+          {menuOpen ? "✕" : "☰"}
+        </button>
+      </div>
+    </header>
   );
 }
 

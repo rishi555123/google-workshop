@@ -1,206 +1,211 @@
-import React, { useState, useEffect } from 'react';
-import { analyzeFoodImage } from '../services/GeminiHelper';
+import { useState, useEffect } from "react";
+import {
+  getDonationsForUser,
+  addDonation,
+  deleteDonation,
+  syncExpiredDonations,
+} from "../services/storageService";
+import { analyzeFoodImage } from "../services/GeminiHelper";
 
-function RestaurantDashboard({ user, goEdit, deleteAccount }) {
-  const [showModal, setShowModal] = useState(false);
+function RestaurantDashboard({ user, onEdit, onDeleteAccount }) {
   const [donations, setDonations] = useState([]);
-  const [newFood, setNewFood] = useState({ name: "", qty: "", freshness: "" }); // Reset to empty string
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [isAiLoading, setIsAiLoading]   = useState(false);
+  const [aiTimer, setAiTimer]           = useState(0);
   const [imagePreview, setImagePreview] = useState(null);
-  const [timer, setTimer] = useState(0);
+  const [form, setForm] = useState({ name: "", qty: "", freshness: "" });
 
-  const loadDonations = () => {
-    const saved = JSON.parse(localStorage.getItem("donations")) || [];
-    setDonations(saved.filter(d => d.userId === user.userId));
+  const load = () => {
+    syncExpiredDonations();
+    setDonations(getDonationsForUser(user.userId));
   };
 
-  useEffect(() => {
-    loadDonations();
-  }, [user.userId]);
+  useEffect(() => { load(); }, [user.userId]);
 
+  // AI scan timer
   useEffect(() => {
-    let interval;
-    if (isAiLoading) {
-      interval = setInterval(() => setTimer((prev) => prev + 1), 1000);
-    } else {
-      setTimer(0);
-    }
-    return () => clearInterval(interval);
+    if (!isAiLoading) { setAiTimer(0); return; }
+    const id = setInterval(() => setAiTimer((t) => t + 1), 1000);
+    return () => clearInterval(id);
   }, [isAiLoading]);
 
   const resetForm = () => {
-    setNewFood({ name: "", qty: "", freshness: "" });
+    setForm({ name: "", qty: "", freshness: "" });
     setImagePreview(null);
-    setTimer(0);
+  };
+
+  const handleImageScan = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImagePreview(URL.createObjectURL(file));
+    setIsAiLoading(true);
+    setForm((f) => ({ ...f, freshness: "Scanning…" }));
+
+    const data = await analyzeFoodImage(file);
+
+    if (data.freshness === "Unsafe") {
+      alert(`❌ AI Safety Alert: Spoilage detected — ${data.reason || "unsafe to donate"}.\nThis item cannot be posted.`);
+      resetForm();
+    } else if (data.name) {
+      setForm({ name: data.name, qty: String(data.qty || ""), freshness: "Safe" });
+    } else {
+      setForm((f) => ({ ...f, freshness: "" }));
+      alert("AI couldn't identify the dish. Please fill details manually.");
+    }
+    setIsAiLoading(false);
   };
 
   const handlePost = () => {
-    if (!newFood.name || !newFood.qty) return alert("Please fill all fields");
-    
-    const expiryTime = Date.now() + (4 * 60 * 60 * 1000); 
-
-    const entry = {
-      id: Date.now(),
-      userId: user.userId,
+    if (!form.name || !form.qty) return alert("Please fill food name and quantity.");
+    const donation = {
+      id:         Date.now(),
+      userId:     user.userId,
       restaurant: user.name,
-      name: newFood.name,
-      qty: newFood.qty,
-      freshness: newFood.freshness, 
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      expiry: expiryTime,
-      status: "Available",
-      lat: user.lat,
-      lng: user.lng,
-      phone: user.phone
+      phone:      user.phone,
+      lat:        user.lat,
+      lng:        user.lng,
+      name:       form.name,
+      qty:        form.qty,
+      freshness:  form.freshness,
+      time:       new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      expiry:     Date.now() + 4 * 60 * 60 * 1000, // 4 hours
+      status:     "Available",
     };
-
-    const all = JSON.parse(localStorage.getItem("donations") || "[]");
-    localStorage.setItem("donations", JSON.stringify([entry, ...all]));
-    loadDonations();
+    addDonation(donation);
+    load();
     setShowModal(false);
     resetForm();
   };
 
-  const deleteDonation = (id) => {
+  const handleDelete = (id) => {
     if (window.confirm("Delete this donation post permanently?")) {
-      const all = JSON.parse(localStorage.getItem("donations")) || [];
-      const filtered = all.filter(d => d.id !== id);
-      localStorage.setItem("donations", JSON.stringify(filtered));
-      loadDonations();
+      deleteDonation(id);
+      load();
     }
   };
 
+  const statusClass = (s) =>
+    s === "Available" ? "badge-green" : s === "Claimed" ? "badge-red" : "badge-gray";
+
   return (
-    <div className="dashboard-container">
-      {/* NEW HERO BACKGROUND AREA */}
-      <div className="dashboard-hero-bg">
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px', alignItems: 'center', position: 'relative', zIndex: 2 }}>
-          <div className="user-info-bar">
-            <div className="user-avatar">{user.name[0]}</div>
-            <span>Logged in as: {user.name}</span>
+    <div className="dashboard">
+      {/* Hero */}
+      <div className="dashboard-hero">
+        <div className="user-bar">
+          <div className="user-pill">
+            <div className="user-avatar">{user.name[0].toUpperCase()}</div>
+            {user.name}
           </div>
-          <div style={{display: 'flex', gap: '10px'}}>
-            <button onClick={goEdit} className="outline-btn" style={{background: 'rgba(255,255,255,0.9)'}}>Edit Profile</button>
-            <button onClick={deleteAccount} className="outline-btn" style={{color: 'red', borderColor: 'red', background: 'rgba(255,255,255,0.9)'}}>Delete Account</button>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 2 }}>
-          <h1 style={{color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)'}}>Restaurant Dashboard</h1>
-          <button className="primary-btn" onClick={() => { resetForm(); setShowModal(true); }}>+ Post Donation</button>
-        </div>
-      </div>
-
-      <div className="stats-grid" style={{marginTop: '-40px', position: 'relative', zIndex: 3}}>
-        <div className="stat-card"><h4>Total Posted</h4><h2>{donations.length}</h2></div>
-        <div className="stat-card"><h4>Meals Saved</h4><h2>1,250</h2></div>
-        <div className="stat-card"><h4>Active</h4><h2>{donations.filter(d => d.status === "Available").length}</h2></div>
-        <div className="stat-card"><h4>Impact</h4><h2>98%</h2></div>
-      </div>
-
-      <h3 style={{marginTop: '40px'}}>Recent Donations</h3>
-      {donations.map((d, i) => (
-        <div key={i} className="donation-list-item">
-          <div className="donation-info">
-            <div className="food-icon-box">🍱</div>
-            <div>
-              <b style={{fontSize: '1.1rem'}}>{d.name}</b>
-              <p style={{margin: '5px 0', color: '#64748b'}}>{d.qty} servings • {d.time}</p>
-              
-              {/* CLEAN AI BADGE: No Manual Entry text */}
-              {d.freshness === 'Safe' && (
-                <small style={{
-                  color: '#16a34a',
-                  fontWeight: 'bold',
-                  background: '#f0fdf4',
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid #bbf7d0',
-                  display: 'inline-block',
-                  marginTop: '4px'
-                }}>
-                  ✨ AI Verified: Safe
-                </small>
-              )}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <span className={`badge ${d.status === "Available" ? 'status-available' : d.status === "Expired" ? 'status-expired' : 'status-claimed'}`}>
-              {d.status}
-            </span>
-            <button onClick={() => deleteDonation(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>
-              🗑️
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn btn-outline btn-sm" style={{ background: "rgba(255,255,255,0.9)" }} onClick={onEdit}>
+              Edit Profile
+            </button>
+            <button className="btn btn-danger btn-sm" style={{ background: "rgba(255,255,255,0.9)" }} onClick={onDeleteAccount}>
+              Delete Account
             </button>
           </div>
         </div>
-      ))}
+        <h1>Restaurant Dashboard</h1>
+      </div>
 
-      {showModal && (
-        <div className="popup">
-          <div className="popup-box" style={{maxHeight: '85vh', overflowY: 'auto'}}>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-               <h3>Post New Donation</h3>
-               <button onClick={resetForm} style={{fontSize: '0.8rem', color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer'}}>Reset Form</button>
+      {/* Stats */}
+      <div className="dash-stats">
+        <div className="dash-stat"><h4>Total Posted</h4><h2>{donations.length}</h2></div>
+        <div className="dash-stat"><h4>Active Now</h4>  <h2>{donations.filter((d) => d.status === "Available").length}</h2></div>
+        <div className="dash-stat"><h4>Claimed</h4>     <h2>{donations.filter((d) => d.status === "Claimed").length}</h2></div>
+        <div className="dash-stat"><h4>Impact</h4>      <h2>98%</h2></div>
+      </div>
+
+      {/* Donate button */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h2 className="section-title">Recent Donations</h2>
+        <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
+          + Post Donation
+        </button>
+      </div>
+
+      {/* Donation list */}
+      {donations.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">🍱</div>
+          <h3>No donations yet</h3>
+          <p>Click "Post Donation" to add your first surplus food listing.</p>
+        </div>
+      ) : (
+        donations.map((d) => (
+          <div className="donation-item" key={d.id}>
+            <div className="donation-item-left">
+              <div className="food-icon">🍱</div>
+              <div>
+                <h4>{d.name}</h4>
+                <p>{d.qty} servings · {d.time}</p>
+                {d.freshness === "Safe" && (
+                  <span className="badge badge-green" style={{ marginTop: 4 }}>✨ AI Verified: Safe</span>
+                )}
+              </div>
             </div>
-            
-            <div className="ai-scan-section">
-              <label className="ai-scan-label">✨ AI Freshness Scan</label>
-              
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span className={`badge ${statusClass(d.status)}`}>{d.status}</span>
+              <button
+                onClick={() => handleDelete(d.id)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.1rem", padding: 4 }}
+                title="Delete"
+              >
+                🗑️
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Post Donation Modal */}
+      {showModal && (
+        <div className="overlay">
+          <div className="modal">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h3>Post New Donation</h3>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setShowModal(false); resetForm(); }}>✕</button>
+            </div>
+
+            {/* AI scan */}
+            <div className="ai-box">
+              <p className="ai-box-label">✨ AI Freshness Scan (optional)</p>
               {imagePreview && (
-                <img 
-                  src={imagePreview} 
-                  alt="Preview" 
-                  style={{width: '120px', height: '120px', objectFit: 'cover', borderRadius: '12px', marginBottom: '10px', border: '3px solid #16a34a', boxShadow: '0 4px 12px rgba(22, 163, 74, 0.2)'}} 
-                />
+                <img src={imagePreview} alt="Preview"
+                  style={{ width: 100, height: 100, objectFit: "cover", borderRadius: 10,
+                           margin: "0 auto 10px", border: "3px solid var(--primary)", display: "block" }} />
               )}
-              
-              <input type="file" accept="image/*" onChange={async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  setImagePreview(URL.createObjectURL(file));
-                  setIsAiLoading(true);
-                  setNewFood(prev => ({ ...prev, freshness: "Scanning..." }));
-                  
-                  const data = await analyzeFoodImage(file);
-                  
-                  if (data) {
-                    if (data.freshness === "Unsafe") {
-                      alert(`❌ AI SAFETY ALERT: Spoilage detected. This cannot be donated.`);
-                      resetForm();
-                    } else {
-                      setNewFood({ 
-                        name: data.name || "", 
-                        qty: data.qty || "", 
-                        // ONLY set freshness if AI identifies as Safe
-                        freshness: data.name ? "Safe" : "" 
-                      });
-                      if (!data.name) alert("AI couldn't identify the dish. Please fill manually.");
-                    }
-                  }
-                  setIsAiLoading(false);
-                }
-              }} />
-              
+              <input type="file" accept="image/*" onChange={handleImageScan} />
               {isAiLoading && (
-                <div style={{marginTop: '10px'}}>
-                  <p className="ai-loading-text">Gemini AI is analyzing... ({timer}s)</p>
-                  <div className="ai-progress-container">
-                    <div className="ai-progress-bar"></div>
-                  </div>
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ fontSize: "0.85rem", color: "var(--primary)", fontWeight: 700 }}>
+                    Gemini AI analyzing… ({aiTimer}s)
+                  </p>
+                  <div className="ai-progress"><div className="ai-progress-bar" /></div>
                 </div>
               )}
             </div>
 
-            <label>Food Item Name</label>
-            <input placeholder="e.g. Rice & Curry" value={newFood.name} onChange={e => setNewFood({...newFood, name: e.target.value})} />
-            
-            <label>Quantity (Servings)</label>
-            <input placeholder="e.g. 20" value={newFood.qty} onChange={e => setNewFood({...newFood, qty: e.target.value})} />
-            
-            <button className="primary-btn" style={{ width: '100%', marginTop: '20px' }} onClick={handlePost} disabled={isAiLoading}>
-              {isAiLoading ? "Processing AI Analysis..." : "Submit Donation"}
+            <div className="form-group">
+              <label className="form-label">Food Item Name</label>
+              <input className="form-input" placeholder="e.g. Rice & Curry"
+                value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Quantity (servings)</label>
+              <input className="form-input" type="number" placeholder="e.g. 20"
+                value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} />
+            </div>
+
+            <button
+              className="btn btn-primary btn-full"
+              onClick={handlePost}
+              disabled={isAiLoading}
+              style={{ marginTop: 8 }}
+            >
+              {isAiLoading ? "Processing AI…" : "Submit Donation"}
             </button>
-            <button onClick={() => setShowModal(false)} style={{ width: '100%', marginTop: '10px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>Cancel</button>
           </div>
         </div>
       )}

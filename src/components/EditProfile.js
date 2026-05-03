@@ -1,111 +1,141 @@
-import React, { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import { useState, useEffect } from "react";
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import { updateProfile } from "../services/authService";
 
-// Fix for default Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl:       "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl:     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
-function EditProfile({ user, setUser, goBack }) {
-  const [formData, setFormData] = useState({ ...user });
+function MapRecenter({ lat, lng }) {
+  const map = useMap();
+  useEffect(() => { map.flyTo([lat, lng], map.getZoom()); }, [lat, lng, map]);
+  return null;
+}
+
+function LocationMarker({ lat, lng, onPick }) {
+  useMapEvents({ click(e) { onPick(e.latlng.lat, e.latlng.lng); } });
+  return <Marker position={[lat, lng]} />;
+}
+
+function EditProfile({ user, setUser, onBack }) {
+  const [form, setForm]           = useState({ ...user });
   const [isLocating, setIsLocating] = useState(false);
 
-  // Re-centers the map visually when coordinates change
-  function MapRecenter({ lat, lng }) {
-    const map = useMap();
-    useEffect(() => {
-      map.flyTo([lat, lng], map.getZoom());
-    }, [lat, lng, map]);
-    return null;
-  }
-
-  // Handle manual clicks on the map to re-pin
-  function LocationMarker() {
-    useMapEvents({
-      click(e) {
-        const { lat, lng } = e.latlng;
-        setFormData(prev => ({ ...prev, lat, lng, address: `Pinned: ${lat.toFixed(4)}, ${lng.toFixed(4)}` }));
-      },
-    });
-    return <Marker position={[formData.lat, formData.lng]} />;
-  }
+  const set = (field, val) => setForm((f) => ({ ...f, [field]: val }));
 
   const getLiveLocation = () => {
     if (!navigator.geolocation) return alert("Geolocation not supported");
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const { latitude, longitude } = pos.coords;
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-        const data = await res.json();
-        setFormData({ ...formData, address: data.display_name, lat: latitude, lng: longitude });
-      } catch {
-        setFormData({ ...formData, address: `${latitude}, ${longitude}`, lat: latitude, lng: longitude });
-      }
-      setIsLocating(false);
-    }, () => {
-      setIsLocating(false);
-      alert("Permission denied.");
-    });
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords: { latitude, longitude } }) => {
+        try {
+          const res  = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+          setForm((f) => ({ ...f, address: data.display_name, lat: latitude, lng: longitude }));
+        } catch {
+          setForm((f) => ({ ...f, address: `${latitude}, ${longitude}`, lat: latitude, lng: longitude }));
+        }
+        setIsLocating(false);
+      },
+      () => { setIsLocating(false); alert("Permission denied."); }
+    );
   };
 
-  const handleUpdate = (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-    const updatedUsers = users.map((u) => (u.userId === user.userId ? formData : u));
-    
-    localStorage.setItem("users", JSON.stringify(updatedUsers)); // Save to storage
-    setUser(formData); // Update current session
-    alert("Profile and Location updated successfully!");
-    goBack();
+    updateProfile(form);
+    setUser(form);
+    alert("Profile updated successfully!");
+    onBack();
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card" style={{ maxWidth: "500px" }}>
-        <button onClick={goBack} className="back-btn">← Back</button>
-        <h2>Edit Profile</h2>
-        <form onSubmit={handleUpdate}>
-          <label>Name</label>
-          <input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
-          
-          <label>Email</label>
-          <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+    <div className="edit-page">
+      <div className="edit-card">
+        <button className="btn btn-ghost" onClick={onBack} style={{ marginBottom: 16 }}>
+          ← Back
+        </button>
 
-          {/* PASSWORD EDIT OPTION */}
-          <label>Change Password</label>
-          <input type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required />
+        <div className="card card-pad">
+          <h2 style={{ fontFamily: "'DM Serif Display', serif", fontSize: "1.8rem", marginBottom: 28 }}>
+            Edit Profile
+          </h2>
 
-          <label>Phone</label>
-          <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required />
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Name</label>
+              <input className="form-input" value={form.name} required
+                onChange={(e) => set("name", e.target.value)} />
+            </div>
 
-          {/* MAP EDITING SECTION */}
-          <label>Update Location</label>
-          <div style={{ position: 'relative', marginBottom: '10px' }}>
-            <input value={formData.address} required onChange={(e) => setFormData({...formData, address: e.target.value})} />
-            <button type="button" onClick={getLiveLocation} style={{ position: 'absolute', right: '10px', top: '10px', border: 'none', background: 'none', cursor: 'pointer' }}>
-              {isLocating ? "⌛" : "📍"}
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input className="form-input" type="email" value={form.email} required
+                onChange={(e) => set("email", e.target.value)} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Change Password</label>
+              <input className="form-input" type="password" value={form.password} required
+                onChange={(e) => set("password", e.target.value)} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Phone</label>
+              <input className="form-input" type="tel" value={form.phone} required
+                onChange={(e) => set("phone", e.target.value)} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Address / Location</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  className="form-input"
+                  value={form.address}
+                  required
+                  onChange={(e) => set("address", e.target.value)}
+                  style={{ paddingRight: 44 }}
+                />
+                <button
+                  type="button"
+                  onClick={getLiveLocation}
+                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                           background: "none", border: "none", cursor: "pointer", fontSize: "1.2rem" }}
+                >
+                  {isLocating ? "⌛" : "📍"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ height: 200, borderRadius: "var(--radius-sm)", overflow: "hidden",
+                          marginBottom: 8, border: "1.5px solid var(--border)" }}>
+              <MapContainer center={[form.lat, form.lng]} zoom={13} style={{ height: "100%" }}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <MapRecenter lat={form.lat} lng={form.lng} />
+                <LocationMarker
+                  lat={form.lat} lng={form.lng}
+                  onPick={(lat, lng) =>
+                    setForm((f) => ({ ...f, lat, lng, address: `Pinned: ${lat.toFixed(4)}, ${lng.toFixed(4)}` }))
+                  }
+                />
+              </MapContainer>
+            </div>
+            <p style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: 20 }}>
+              Click map to update your pin
+            </p>
+
+            <button type="submit" className="btn btn-primary btn-full">
+              Save Changes
             </button>
-          </div>
-
-          <div style={{ height: '200px', borderRadius: '10px', overflow: 'hidden', marginBottom: '15px', border: '1px solid #ddd' }}>
-            <MapContainer center={[formData.lat, formData.lng]} zoom={13} style={{ height: '100%' }}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <MapRecenter lat={formData.lat} lng={formData.lng} /> 
-              <LocationMarker />
-            </MapContainer>
-            <small style={{ color: '#64748b' }}>Click map to update your pin</small>
-          </div>
-
-          <button type="submit" className="primary-btn" style={{ width: "100%", marginTop: "10px" }}>
-            Save Changes
-          </button>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );
